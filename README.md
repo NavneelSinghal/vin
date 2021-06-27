@@ -5,4 +5,4 @@ This is a modal text editor with some of vim's keybindings, based on [kilo](http
 Some features that can be implemented in the future:
 
 1. Search and replace
-2. Syntax highlighting
+2. More comprehensive syntax highlighting
