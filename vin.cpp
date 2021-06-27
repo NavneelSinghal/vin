@@ -301,15 +301,15 @@ void editorUpdateSyntax(editorRow& row) {
 int editorSyntaxToColor(int x) {
     switch (x) {
         case HL_COMMENT:
-            return 36;
+            return 90;
         case HL_KEYWORD1:
-            return 33;
+            return 94; // 33;
         case HL_KEYWORD2:
-            return 32;
+            return 91; // 32;
         case HIGHLIGHT_NUMBER:
-            return 31;
+            return 36; // 31;
         case HL_STRING:
-            return 35;
+            return 36; // 35;
         default:
             return 37;
     }
