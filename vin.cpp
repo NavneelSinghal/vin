@@ -1,6 +1,7 @@
 /** includes */
 
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -238,7 +239,8 @@ void editorUpdateSyntax(editorRow& row) {
 
         if (scs.size() != 0 && !in_string) {
             if (!strncmp(row.rendered_row.data() + i, scs.data(), scs.size())) {
-                memset(row.highlight_row.data() + i, HIGHLIGHT_COMMENT, len - i);
+                memset(row.highlight_row.data() + i, HIGHLIGHT_COMMENT,
+                       len - i);
                 break;
             }
         }
@@ -303,13 +305,13 @@ int editorSyntaxToColor(int x) {
         case HIGHLIGHT_COMMENT:
             return 90;
         case HIGHLIGHT_KEYWORD1:
-            return 94; // 33;
+            return 94;  // 33;
         case HIGHLIGHT_KEYWORD2:
-            return 91; // 32;
+            return 91;  // 32;
         case HIGHLIGHT_NUMBER:
-            return 36; // 31;
+            return 36;  // 31;
         case HIGHLIGHT_STRING:
-            return 36; // 35;
+            return 36;  // 35;
         default:
             return 37;
     }
@@ -813,9 +815,18 @@ void initEditor() {
     E.screen_rows -= 2;
 }
 
+void handleSIGWINCH(int t = 0) {
+    std::ignore = t;
+    initEditor();
+    editorRefreshScreen();
+}
+
+void setSignalHandler() { signal(SIGWINCH, handleSIGWINCH); }
+
 int main(int argc, char** argv) {
     enableRawMode();
     initEditor();
+    setSignalHandler();
     if (argc >= 2) editorOpen(argv[1]);
     editorSetStatusMessage("Use :q to quit, :w to save");
     while (1) {
