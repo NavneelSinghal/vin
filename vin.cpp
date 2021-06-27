@@ -36,9 +36,12 @@ enum editorKey {
     DEL_KEY
 };
 
+enum editorMode { NORMAL, COMMAND, INSERT };
+
 /** data */
 
 struct editorConfig {
+    int mode = NORMAL;    // mode in which the editor operates
     int cursor_x = 0;     // location in the file
     int cursor_y = 0;     // location in the file
     int rendered_x = 0;   // taking into account rendering of characters, hence
@@ -53,6 +56,8 @@ struct editorConfig {
     std::vector<std::string> rendered_rows;  // rows of the rendered rows
     std::string filename = "";
     std::string command_bar = "";  // for command mode and alert messages
+    std::string normal_buf = "";
+    std::string command_buf = "";
     struct termios
         original_termios;  // terminal information to be restored in the end
 };
@@ -311,12 +316,34 @@ void editorSave() {
     editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
 }
 
+void editorExecuteCommand() {
+    if (E.command_buf == "q") {
+        if (E.dirty) {
+            editorSetStatusMessage(
+                "File has unsaved changes. Use :q! to force quit");
+            return;
+        }
+        write(STDOUT_FILENO, "\x1b[2J", 4);
+        write(STDOUT_FILENO, "\x1b[H", 3);
+        exit(0);
+    } else if (E.command_buf == "q!") {
+        write(STDOUT_FILENO, "\x1b[2J", 4);
+        write(STDOUT_FILENO, "\x1b[H", 3);
+        exit(0);
+    } else if (E.command_buf == "w") {
+        editorSave();
+    } else {
+        editorSetStatusMessage("Unsupported command: %s", E.command_buf.data());
+    }
+}
+
 /** input */
 
 void editorMoveCursor(int c) {
     bool not_on_last = size_t(E.cursor_y) < E.rows.size();
     switch (c) {
         case ARROW_LEFT:
+        case 'h':
             if (E.cursor_x > 0)
                 E.cursor_x--;
             else if (E.cursor_y > 0) {  // to go to end of previous line
@@ -325,6 +352,7 @@ void editorMoveCursor(int c) {
             }
             break;
         case ARROW_RIGHT:
+        case 'l':
             // to not allow overflowing past the end (one past the end allowed)
             if (not_on_last &&
                 size_t(E.cursor_x) < E.rows[size_t(E.cursor_y)].size())
@@ -337,9 +365,11 @@ void editorMoveCursor(int c) {
             }
             break;
         case ARROW_DOWN:
+        case 'j':
             if (E.cursor_y < (int)E.rows.size()) E.cursor_y++;
             break;
         case ARROW_UP:
+        case 'k':
             if (E.cursor_y > 0) E.cursor_y--;
             break;
     }
@@ -351,68 +381,141 @@ void editorMoveCursor(int c) {
 }
 
 void editorProcessKeypress() {
-    static int quit_times = QUIT_TIMES;
     int c = editorReadKey();
-    switch (c) {
-        case '\r':
-            editorInsertNewline();
-            break;
-        case CTRL_KEY('q'):
-            if (E.dirty && quit_times > 0) {
-                editorSetStatusMessage(
-                    "File has unsaved changes. "
-                    "Repeat Ctrl-Q %d more times to quit.",
-                    quit_times);
-                quit_times--;
-                return;
+    if (E.mode == INSERT) {
+        switch (c) {
+            case '\x1b':
+                E.mode = NORMAL;
+                break;
+            case '\r':
+                editorInsertNewline();
+                break;
+            case HOME_KEY:
+                E.cursor_x = 0;
+                break;
+            case END_KEY:
+                if (E.cursor_y < (int)E.rendered_rows.size())
+                    E.cursor_x = (int)E.rows[size_t(E.cursor_y)].size();
+                break;
+            case BACKSPACE:
+            case CTRL_KEY('h'):
+            case DEL_KEY:
+                if (c == DEL_KEY) editorMoveCursor(ARROW_RIGHT);
+                editorDelChar();
+                break;
+            case PAGE_UP:
+            case PAGE_DOWN: {
+                if (c == PAGE_UP) {
+                    E.cursor_y = E.row_offset;
+                } else if (c == PAGE_DOWN) {
+                    E.cursor_y = E.row_offset + E.screen_rows - 1;
+                    if (E.cursor_y > (int)E.rendered_rows.size())
+                        E.cursor_y = (int)E.rendered_rows.size();
+                }
+                int times = E.screen_rows;
+                while (times--)
+                    editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+            } break;
+            case ARROW_LEFT:
+            case ARROW_DOWN:
+            case ARROW_UP:
+            case ARROW_RIGHT:
+                editorMoveCursor(c);
+                break;
+            case CTRL_KEY('l'):
+                break;
+            default:
+                editorInsertChar(c);
+                break;
+        }
+    } else if (E.mode == NORMAL) {
+        if (E.normal_buf.empty()) {
+            switch (c) {
+                case 'i':
+                    E.normal_buf = "";
+                    E.mode = INSERT;
+                    break;
+                case ':':
+                    E.normal_buf = "";
+                    E.mode = COMMAND;
+                    editorSetStatusMessage(":");
+                    break;
+                case '\x1b':
+                    E.mode = NORMAL;
+                    break;
+                case '\r':
+                    editorMoveCursor(ARROW_DOWN);
+                case HOME_KEY:
+                case '0':
+                    E.cursor_x = 0;
+                    break;
+                case END_KEY:
+                case '$':
+                    if (E.cursor_y < (int)E.rendered_rows.size())
+                        E.cursor_x = (int)E.rows[size_t(E.cursor_y)].size();
+                    break;
+                case BACKSPACE:
+                case CTRL_KEY('h'):
+                    editorMoveCursor(ARROW_LEFT);
+                    break;
+                case PAGE_UP:
+                case PAGE_DOWN: {
+                    if (c == PAGE_UP) {
+                        E.cursor_y = E.row_offset;
+                    } else if (c == PAGE_DOWN) {
+                        E.cursor_y = E.row_offset + E.screen_rows - 1;
+                        if (E.cursor_y > (int)E.rendered_rows.size())
+                            E.cursor_y = (int)E.rendered_rows.size();
+                    }
+                    int times = E.screen_rows;
+                    while (times--)
+                        editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+                } break;
+                case ARROW_LEFT:
+                case ARROW_DOWN:
+                case ARROW_UP:
+                case ARROW_RIGHT:
+                case 'h':
+                case 'j':
+                case 'k':
+                case 'l':
+                    editorMoveCursor(c);
+                    break;
+                case CTRL_KEY('l'):
+                    break;
+                case 'G':
+                    while (E.cursor_y != (int)E.rows.size())
+                        editorMoveCursor(ARROW_DOWN);
             }
-            write(STDOUT_FILENO, "\x1b[2J", 4);
-            write(STDOUT_FILENO, "\x1b[H", 3);
-            exit(0);
-            break;
-        case CTRL_KEY('s'):
-            editorSave();
-            break;
-        case HOME_KEY:
-            E.cursor_x = 0;
-            break;
-        case END_KEY:
-            if (E.cursor_y < (int)E.rendered_rows.size())
-                E.cursor_x = (int)E.rows[size_t(E.cursor_y)].size();
-            break;
-        case BACKSPACE:
-        case CTRL_KEY('h'):
-        case DEL_KEY:
-            if (c == DEL_KEY) editorMoveCursor(ARROW_RIGHT);
-            editorDelChar();
-            break;
-        case PAGE_UP:
-        case PAGE_DOWN: {
-            if (c == PAGE_UP) {
-                E.cursor_y = E.row_offset;
-            } else if (c == PAGE_DOWN) {
-                E.cursor_y = E.row_offset + E.screen_rows - 1;
-                if (E.cursor_y > (int)E.rendered_rows.size())
-                    E.cursor_y = (int)E.rendered_rows.size();
+        } else {
+            switch (c) {
+                case BACKSPACE:
+                    E.normal_buf.pop_back();
+                    break;
             }
-            int times = E.screen_rows;
-            while (times--)
-                editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
-        } break;
-        case ARROW_LEFT:
-        case ARROW_DOWN:
-        case ARROW_UP:
-        case ARROW_RIGHT:
-            editorMoveCursor(c);
-            break;
-        case CTRL_KEY('l'):
-        case '\x1b':
-            break;
-        default:
-            editorInsertChar(c);
-            break;
+        }
+    } else if (E.mode == COMMAND) {
+        switch (c) {
+            case '\r':
+                editorExecuteCommand();
+                E.command_buf = "";
+                E.mode = NORMAL;
+                break;
+            case '\x1b':
+                E.command_buf = "";
+                E.mode = NORMAL;
+                editorSetStatusMessage("");
+                break;
+            case BACKSPACE:
+                if (!E.command_buf.empty()) E.command_buf.pop_back();
+                editorSetStatusMessage((":" + E.command_buf).data());
+                break;
+            default:
+                E.command_buf.push_back((char)c);
+                editorSetStatusMessage((":" + E.command_buf).data());
+                break;
+        }
     }
-    quit_times = QUIT_TIMES;
 }
 
 /** output */
@@ -459,11 +562,24 @@ void editorDrawStatusBar(std::string& s) {
                             std::min(display_name.size(), size_t(20))) +
         " - " + std::to_string(E.rows.size()) + " lines" + " " +
         (E.dirty ? "(modified)" : "");
+    display_status += " [";
+    switch (E.mode) {
+        case NORMAL:
+            display_status += "NORMAL";
+            break;
+        case INSERT:
+            display_status += "INSERT";
+            break;
+        case COMMAND:
+            display_status += "COMMAND";
+            break;
+    }
+    display_status += "] ";
+    s += display_status;
     display_status = display_status.substr(
         size_t(0), std::min(display_status.size(), size_t(E.screen_cols)));
-    auto line_number = std::to_string(E.cursor_y);
-    s += display_status;
     s += std::string(size_t(E.screen_cols) - display_status.size(), ' ');
+    auto line_number = std::to_string(E.cursor_y);
     for (int i = 0; i < (int)line_number.size(); ++i) s.pop_back();
     s += line_number;
     s += "\x1b[m";
@@ -511,7 +627,7 @@ int main(int argc, char** argv) {
     enableRawMode();
     initEditor();
     if (argc >= 2) editorOpen(argv[1]);
-    editorSetStatusMessage("Use Ctrl-Q to quit, Ctrl-S to save");
+    editorSetStatusMessage("Use :q to quit, :w to save");
     while (1) {
         editorRefreshScreen();
         editorProcessKeypress();
