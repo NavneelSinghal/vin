@@ -40,10 +40,10 @@ enum editorKey {
 
 enum editorHighlight {
     HIGHLIGHT_NORMAL = 0,
-    HL_KEYWORD1,
-    HL_KEYWORD2,
-    HL_COMMENT,
-    HL_STRING,
+    HIGHLIGHT_KEYWORD1,
+    HIGHLIGHT_KEYWORD2,
+    HIGHLIGHT_COMMENT,
+    HIGHLIGHT_STRING,
     HIGHLIGHT_NUMBER
 };
 
@@ -238,16 +238,16 @@ void editorUpdateSyntax(editorRow& row) {
 
         if (scs.size() != 0 && !in_string) {
             if (!strncmp(row.rendered_row.data() + i, scs.data(), scs.size())) {
-                memset(row.highlight_row.data() + i, HL_COMMENT, len - i);
+                memset(row.highlight_row.data() + i, HIGHLIGHT_COMMENT, len - i);
                 break;
             }
         }
 
         if ((E.syntax.flags & HL_HIGHLIGHT_STRINGS) != 0) {
             if (in_string) {
-                row.highlight_row[i] = HL_STRING;
+                row.highlight_row[i] = HIGHLIGHT_STRING;
                 if (c == '\\' && i + 1 < row.rendered_row.size()) {
-                    row.highlight_row[i + 1] = HL_STRING;
+                    row.highlight_row[i + 1] = HIGHLIGHT_STRING;
                     i += 2;
                     continue;
                 }
@@ -258,7 +258,7 @@ void editorUpdateSyntax(editorRow& row) {
             } else {
                 if (c == '"' || c == '\'') {
                     in_string = c;
-                    row.highlight_row[i] = HL_STRING;
+                    row.highlight_row[i] = HIGHLIGHT_STRING;
                     i++;
                     continue;
                 }
@@ -284,7 +284,7 @@ void editorUpdateSyntax(editorRow& row) {
                              klen) &&
                     is_separator(row.rendered_row[i + klen])) {
                     memset(row.highlight_row.data() + i,
-                           kw2 ? HL_KEYWORD2 : HL_KEYWORD1, klen);
+                           kw2 ? HIGHLIGHT_KEYWORD2 : HIGHLIGHT_KEYWORD1, klen);
                     i += klen;
                     break;
                 }
@@ -300,15 +300,15 @@ void editorUpdateSyntax(editorRow& row) {
 
 int editorSyntaxToColor(int x) {
     switch (x) {
-        case HL_COMMENT:
+        case HIGHLIGHT_COMMENT:
             return 90;
-        case HL_KEYWORD1:
+        case HIGHLIGHT_KEYWORD1:
             return 94; // 33;
-        case HL_KEYWORD2:
+        case HIGHLIGHT_KEYWORD2:
             return 91; // 32;
         case HIGHLIGHT_NUMBER:
             return 36; // 31;
-        case HL_STRING:
+        case HIGHLIGHT_STRING:
             return 36; // 35;
         default:
             return 37;
