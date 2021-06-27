@@ -13,6 +13,7 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -71,14 +72,14 @@ void editorSetStatusMessage(const char* fmt, ...);
 /** terminal */
 
 void die(const char* s) {
-    write(STDOUT_FILENO, "\x1b[2J", 4);
-    write(STDOUT_FILENO, "\x1b[H", 3);
+    std::ignore = write(STDOUT_FILENO, "\x1b[2J", 4);
+    std::ignore = write(STDOUT_FILENO, "\x1b[H", 3);
     perror(s);
     exit(1);
 }
 
 void disableRawMode() {
-    write(STDOUT_FILENO, "\x1b[?1049l", 8);
+    std::ignore = write(STDOUT_FILENO, "\x1b[?1049l", 8);
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.original_termios) == -1)
         die("tcsetattr");
 }
@@ -93,7 +94,7 @@ void enableRawMode() {
     raw.c_lflag &= tcflag_t(~(ECHO | ICANON | IEXTEN | ISIG));
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
-    write(STDOUT_FILENO, "\x1b[?1049h", 8);
+    std::ignore = write(STDOUT_FILENO, "\x1b[?1049h", 8);
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) die("tcsetattr");
 }
 
@@ -323,12 +324,12 @@ void editorExecuteCommand() {
                 "File has unsaved changes. Use :q! to force quit");
             return;
         }
-        write(STDOUT_FILENO, "\x1b[2J", 4);
-        write(STDOUT_FILENO, "\x1b[H", 3);
+        std::ignore = write(STDOUT_FILENO, "\x1b[2J", 4);
+        std::ignore = write(STDOUT_FILENO, "\x1b[H", 3);
         exit(0);
     } else if (E.command_buf == "q!") {
-        write(STDOUT_FILENO, "\x1b[2J", 4);
-        write(STDOUT_FILENO, "\x1b[H", 3);
+        std::ignore = write(STDOUT_FILENO, "\x1b[2J", 4);
+        std::ignore = write(STDOUT_FILENO, "\x1b[H", 3);
         exit(0);
     } else if (E.command_buf == "w") {
         editorSave();
@@ -604,7 +605,7 @@ void editorRefreshScreen() {
          std::to_string(E.rendered_x - E.col_offset + 1) + "H";
     // to go to a specified position
     s += "\x1b[?25h";  // to show the cursor again
-    write(STDOUT_FILENO, s.c_str(), s.size());
+    std::ignore = write(STDOUT_FILENO, s.c_str(), s.size());
 }
 
 void editorSetStatusMessage(const char* fmt, ...) {
