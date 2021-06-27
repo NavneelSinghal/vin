@@ -280,7 +280,8 @@ void editorUpdateSyntax(editorRow& row) {
                 size_t klen = keyword.size();
                 bool kw2 = keyword[klen - 1] == '|';
                 if (kw2) klen--;
-                if (!strncmp(row.rendered_row.data() + i, keyword.data(), klen) &&
+                if (!strncmp(row.rendered_row.data() + i, keyword.data(),
+                             klen) &&
                     is_separator(row.rendered_row[i + klen])) {
                     memset(row.highlight_row.data() + i,
                            kw2 ? HL_KEYWORD2 : HL_KEYWORD1, klen);
@@ -674,8 +675,11 @@ void editorProcessKeypress() {
                 editorSetStatusMessage("");
                 break;
             case BACKSPACE:
-                if (!E.command_buf.empty()) E.command_buf.pop_back();
-                editorSetStatusMessage((":" + E.command_buf).data());
+                if (!E.command_buf.empty())
+                    E.command_buf.pop_back(),
+                        editorSetStatusMessage((":" + E.command_buf).data());
+                else
+                    E.mode = NORMAL, editorSetStatusMessage("");
                 break;
             default:
                 E.command_buf.push_back((char)c);
